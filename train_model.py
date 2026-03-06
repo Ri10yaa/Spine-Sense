@@ -7,7 +7,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
 
 # load dataset
-data = pd.read_csv("dataset_raw.csv")
+data = pd.read_csv("train_dataset.csv")
 
 # feature engineering
 data["diff"] = data["flex1"] - data["flex2"]

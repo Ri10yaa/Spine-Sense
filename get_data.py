@@ -2,6 +2,9 @@ import pyrebase
 import csv
 import time
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 config = {
     "apiKey": os.getenv("FIREBASE_API_KEY"),
@@ -13,7 +16,7 @@ config = {
 firebase = pyrebase.initialize_app(config)
 db = firebase.database()
 
-RAW_FILE = "dataset_raw.csv"
+RAW_FILE = "data_raw.csv"
 
 if not os.path.exists(RAW_FILE):
     with open(RAW_FILE,"w",newline="") as f:
@@ -23,18 +26,21 @@ if not os.path.exists(RAW_FILE):
 
 def collect_data():
 
-    data = db.child("posture").get().val()
+    data = db.child("PostureData").get().val()
 
     if data:
 
-        flex1 = data.get("flex1")
-        flex2 = data.get("flex2")
+        latest_key = list(data.keys())[-1]
+        latest_data = data[latest_key]
+
+        flex1 = latest_data["sensor1"]["adc"]
+        flex2 = latest_data["sensor2"]["adc"]
 
         timestamp = time.time()
 
-        with open(RAW_FILE,"a",newline="") as f:
+        with open(RAW_FILE, "a", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow([timestamp,flex1,flex2])
+            writer.writerow([timestamp, flex1, flex2])
 
         return timestamp, flex1, flex2
 
