@@ -11,6 +11,7 @@ from get_data import (
     stop_listener
 )
 from predict_posture import predict_posture
+from calculate_stats import calculate_stats
 
 load_dotenv()
 
@@ -83,6 +84,10 @@ try:
                 process(result, "BACKLOG")
                 processed += 1
             print(f"✅ Backlog sweep done — {processed} entries processed.\n")
+
+            print("\n📊 Calculating and syncing statistics...")
+            calculate_stats()
+            
             last_backlog_time = time.time()
 
         # ---- REAL-TIME CHECK (every 1 second) ----
