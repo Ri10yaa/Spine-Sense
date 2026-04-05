@@ -12,6 +12,7 @@ from get_data import (
 )
 from predict_posture import predict_posture
 from calculate_stats import calculate_stats
+from risk_analysis import analyse_risk
 
 load_dotenv()
 
@@ -87,6 +88,7 @@ try:
 
             print("\n📊 Calculating and syncing statistics...")
             calculate_stats()
+            analyse_risk()
             
             last_backlog_time = time.time()
 
