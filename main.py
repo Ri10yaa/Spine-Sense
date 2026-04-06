@@ -28,8 +28,9 @@ db = firebase.database()
 
 OUTPUT_FILE = "flex_data.csv"
 
-REALTIME_INTERVAL = 1      # seconds
-BACKLOG_INTERVAL  = 300    # seconds (5 minutes)
+REALTIME_INTERVAL  = 1      # seconds
+BACKLOG_INTERVAL   = 300    # seconds (5 minutes)
+SCHEDULER_INTERVAL = 60     # seconds (1 minute — EOD scheduler tick)
 
 if not os.path.exists(OUTPUT_FILE):
     with open(OUTPUT_FILE, "w", newline="") as f:
@@ -67,8 +68,8 @@ start_listener()
 # Give listener 2 seconds to connect and load initial snapshot
 time.sleep(2)
 
-last_backlog_time = time.time()  # Don't run backlog immediately —
-                                 # listener already queued existing entries
+last_backlog_time   = time.time()
+last_scheduler_time = time.time()
 
 try:
     while True:
@@ -88,9 +89,13 @@ try:
 
             print("\n📊 Calculating and syncing statistics...")
             calculate_stats()
-            analyse_risk()
-            
+
             last_backlog_time = time.time()
+
+        # ---- DAILY RISK SCHEDULER (every 1 minute) ----
+        if now - last_scheduler_time >= SCHEDULER_INTERVAL:
+            analyse_risk()
+            last_scheduler_time = time.time()
 
         # ---- REAL-TIME CHECK (every 1 second) ----
         try:
