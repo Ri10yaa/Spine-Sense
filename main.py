@@ -8,7 +8,9 @@ from get_data import (
     collect_data_realtime,
     collect_data_backlog,
     start_listener,
-    stop_listener
+    stop_listener,
+    mark_processed,
+    load_processed_keys_from_firebase
 )
 from predict_posture import predict_posture
 from calculate_stats import calculate_stats
@@ -37,12 +39,16 @@ if not os.path.exists(OUTPUT_FILE):
         writer.writerow(["timestamp", "flex1", "flex2", "posture"])
 
 
-def update_posture_firebase(key, posture):
+def update_posture_firebase(key, timestamp, posture):
     try:
-        db.child("PostureData").child(key).update({"posture": posture})
-        print(f"✅ Updated {key} → {posture}")
+        db.child("postureresult").child(key).set({
+            "id": key,
+            "timestamp": timestamp,
+            "posture": posture
+        })
+        print(f"✅ Written to postureresult/{key} → {posture}")
     except Exception as e:
-        print(f"❌ Firebase update failed: {e}")
+        print(f"❌ Firebase write failed: {e}")
 
 
 def process(result, source):
@@ -54,12 +60,16 @@ def process(result, source):
     with open(OUTPUT_FILE, "a", newline="") as f:
         writer = csv.writer(f)
         writer.writerow([timestamp, flex1, flex2, posture])
-    update_posture_firebase(key, posture)
+    update_posture_firebase(key, timestamp, posture)
+    mark_processed(key)     # mark so backlog never picks this key again
 
 
 print("🚀 Starting Spine-Sense... (Ctrl+C to stop)")
 print(f"   Real-time check : every {REALTIME_INTERVAL}s  (listener-based)")
 print(f"   Backlog sweep   : every {BACKLOG_INTERVAL}s")
+
+# Load already-processed keys from Firebase before starting listener
+load_processed_keys_from_firebase()
 
 # Start listener — runs in background thread, pushes to queue instantly
 start_listener()
@@ -89,13 +99,16 @@ try:
             print("\n📊 Calculating and syncing statistics...")
             calculate_stats()
             analyse_risk()
-            
+
             last_backlog_time = time.time()
 
-        # ---- REAL-TIME CHECK (every 1 second) ----
+        # ---- REAL-TIME CHECK — drain entire queue ----
         try:
-            result = collect_data_realtime()
-            process(result, "LIVE")
+            while True:                         # drain all queued entries
+                result = collect_data_realtime()
+                if not result:
+                    break
+                process(result, "LIVE")
         except Exception as e:
             print(f"❌ Real-time cycle error: {e}")
 
