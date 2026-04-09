@@ -61,7 +61,17 @@ SIDE_EFFECTS = {
     ]
 }
 
+# ── Posture label → risk mapping ──────────────────────────────────────────
+# Maps posture labels from postureresult/ to back/neck bad flags
 RISK_PRIORITY = ["Critical", "High", "Moderate", "Low"]
+
+# ── Posture label → risk mapping ──────────────────────────────────────────
+BACK_BAD_LABELS   = {"Slouching", "Back Slouch", "Forward Bend", "Severe Bad Posture"}
+NECK_BAD_LABELS   = {"Neck Forward", "Forward Bend", "Severe Bad Posture"}
+EITHER_BAD_LABELS = {
+    "Slouching", "Neck Forward", "Back Slouch",
+    "Forward Bend", "Severe Bad Posture", "Slightly Poor Posture"
+}
 
 # In-memory guard — prevents duplicate runs within the same process session
 _last_eod_run: str = ""
@@ -145,53 +155,46 @@ def _fb_set(path: str, data: dict):
         log.error(f"Firebase SET failed [{path}]: {e}")
 
 
-# ── Step 1: Fetch today's raw data ────────────────────────────────────────
+# ── Step 1: Fetch today's posture results ─────────────────────────────────
 
 def fetch_today_data(today: str) -> list:
-    """Fetch today's entries. Tries structured path first, then flat fallback."""
-    log.info(f"Fetching raw data for {today}...")
+    """
+    Fetch today's entries from postureresult/ filtered by timestamp prefix.
+    Each entry: {id, posture, timestamp}
+    """
+    log.info(f"Fetching postureresult entries for {today}...")
 
-    node = _fb_get(f"PostureData/{today}")
-    if node and isinstance(node, dict):
-        entries = list(node.values())
-        log.info(f"  {len(entries)} entries from PostureData/{today}/")
-        return entries
-
-    # Flat fallback for legacy data structure
-    log.warning("Structured path not found — using flat filtered read")
-    raw = _fb_get("PostureData")
+    raw = _fb_get("postureresult")
     if not raw:
-        log.warning("No PostureData found")
+        log.warning("No data found in postureresult/")
         return []
+
     entries = [
         v for v in raw.values()
         if isinstance(v, dict) and v.get("timestamp", "").startswith(today)
     ]
-    log.info(f"  {len(entries)} entries for {today} (flat fallback)")
+    log.info(f"  {len(entries)} entries for {today}")
     return entries
 
 
 # ── Step 2: Compute daily aggregate ───────────────────────────────────────
 
 def compute_daily(entries: list, today: str) -> dict:
-    """Compute full daily risk aggregate from raw sensor entries."""
+    """
+    Compute full daily risk aggregate from postureresult entries.
+    Uses posture labels instead of raw ADC values.
+    """
     total = len(entries)
     if total == 0:
         log.warning(f"No entries to compute daily for {today}")
         return {}
 
-    back_bad   = sum(1 for e in entries if e.get("sensor1", {}).get("adc", 0) > BACK_THRESHOLD)
-    neck_bad   = sum(1 for e in entries if e.get("sensor2", {}).get("adc", 0) > NECK_THRESHOLD)
-    both_bad   = sum(
-        1 for e in entries
-        if e.get("sensor1", {}).get("adc", 0) > BACK_THRESHOLD
-        and e.get("sensor2", {}).get("adc", 0) > NECK_THRESHOLD
-    )
-    either_bad = sum(
-        1 for e in entries
-        if e.get("sensor1", {}).get("adc", 0) > BACK_THRESHOLD
-        or e.get("sensor2", {}).get("adc", 0) > NECK_THRESHOLD
-    )
+    back_bad   = sum(1 for e in entries if e.get("posture") in BACK_BAD_LABELS)
+    neck_bad   = sum(1 for e in entries if e.get("posture") in NECK_BAD_LABELS)
+    both_bad   = sum(1 for e in entries
+                     if e.get("posture") in BACK_BAD_LABELS
+                     and e.get("posture") in NECK_BAD_LABELS)
+    either_bad = sum(1 for e in entries if e.get("posture") in EITHER_BAD_LABELS)
 
     result = _build_risk_block(total, back_bad, neck_bad, both_bad, either_bad)
     result.update({"period": "daily", "date": today, "lastUpdated": _now_str()})
@@ -400,9 +403,9 @@ def run_backfill():
     """
     log.info("=== Historical Backfill ===")
 
-    raw = _fb_get("PostureData")
+    raw = _fb_get("postureresult")
     if not raw:
-        log.warning("No PostureData found")
+        log.warning("No postureresult data found")
         return
 
     by_date = defaultdict(list)

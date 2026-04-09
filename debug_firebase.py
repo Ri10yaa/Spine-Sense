@@ -14,10 +14,16 @@ config = {
 firebase = pyrebase.initialize_app(config)
 db = firebase.database()
 
-data = db.child("RiskAnalysis").get().val()
+import json
 
-if not data:
-    print("No RiskAnalysis data in Firebase.")
-else:
-    import json
-    print(json.dumps(data, indent=2))
+nodes = ["postureresult", "PostureResult", "PostureData", "Stats"]
+
+for node in nodes:
+    data = db.child(node).get().val()
+    if not data:
+        print(f"\n[{node}] — No data found")
+    else:
+        print(f"\n{'='*50}")
+        print(f"[{node}]")
+        print('='*50)
+        print(json.dumps(data, indent=2))
